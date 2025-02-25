@@ -1,4 +1,5 @@
 from langchain.document_loaders import PyPDFLoader, DirectoryLoader
+from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.document_loaders import Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
@@ -6,6 +7,7 @@ from langchain.vectorstores import FAISS
 from langchain_community.llms import Ollama
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
+import bs4
 from tempfile import NamedTemporaryFile
 import time
 import re
@@ -60,7 +62,7 @@ Provide your structured response below:
 """
 
 
-def research_paper_summarizer(file):
+def research_paper_summarizer_pdf(file):
     try:
         with NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             temp_file.write(file.file.read())
@@ -93,5 +95,33 @@ def research_paper_summarizer(file):
         return {"summary": response}
     
     except Exception as e:
-        print("failed at research_paper_summarizer")
+        print("failed at research_paper_summarizer_pdf")
+        print(str(e))
+
+def research_paper_summarizer_web(sitelink):
+    try:
+        loader = WebBaseLoader(sitelink)
+        documents = loader.load()
+
+        # Split the document into chunks
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        docs = text_splitter.split_documents(documents=documents)
+
+        vectorstore = FAISS.from_documents(docs, embeddings)
+
+        # Create a retriever
+        retriever = vectorstore.as_retriever()
+
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True
+        )
+
+        output = qa_chain.invoke({"query": template})
+
+        response=output["result"]
+
+        return {"summary": response}
+    
+    except Exception as e:
+        print("failed at research_paper_summarizer_web")
         print(str(e))
